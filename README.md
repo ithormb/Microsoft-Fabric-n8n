@@ -1,6 +1,6 @@
-# Guia Completo: Integrando n8n com Microsoft Fabric via OAuth2 e Webhook de Retorno
+# n8n + Microsoft Fabric: acionar um pipeline e esperar ele terminar
 
-> **Autor:** Thomas Barbosa — Raposo Plásticos / Fortalplast  
+> **Autor:** Thomas Barbosa  
 > **Data:** Junho de 2026  
 > **Stack:** n8n · Microsoft Fabric · Azure Entra ID · Google Sheets
 
@@ -8,7 +8,7 @@
 
 ## Visão Geral
 
-Este guia documenta um padrão de integração inédito: **acionar um pipeline do Microsoft Fabric a partir do n8n, aguardar o término com precisão cirúrgica e continuar a automação somente após a confirmação de sucesso** — sem timers arbitrários, sem pooling, sem gambiarras.
+Como **acionar um pipeline do Microsoft Fabric a partir do n8n, esperar ele terminar e só então continuar a automação**. O Fabric avisa o n8n por webhook quando acaba, então não é preciso adivinhar um tempo de espera nem consultar o status em loop.
 
 ### Arquitetura Final
 
@@ -27,7 +27,7 @@ Automação Principal (n8n)
 
         ▼ ▼ ▼  O Fabric termina  ▼ ▼ ▼
 
-Webhook Receptor (wb_fabric_pip_tit_receber)
+Webhook Receptor (wf_fabric_retorno)
   ↓
 [Recebe callback do Fabric: {status: "sucesso"}]
   ↓
@@ -110,8 +110,7 @@ O Microsoft Entra ID (antigo Azure Active Directory) é o sistema de identidade 
 | **Scope** | `https://api.fabric.microsoft.com/.default` |
 | **Auth Parameters** | `grant_type=client_credentials` |
 
-4. Clique em **Connect my account** → autorize no popup da Microsoft
-5. Salve a credencial com um nome como `Fabric_&_n8n`
+4. Salve a credencial com um nome como `Fabric_&_n8n`. No fluxo *Client Credentials* o token é obtido direto com o client secret, sem tela de login.
 
 > ⚠️ **Atenção com o Scope:** O escopo `https://api.fabric.microsoft.com/.default` é específico para a API do Fabric. Se usar Power BI, o scope seria `https://analysis.windows.net/powerbi/api/.default`.
 
@@ -187,7 +186,7 @@ Esta é a parte mais importante e menos documentada: **fazer o Fabric avisar o n
 
 Antes de configurar o Fabric, crie o workflow receptor no n8n:
 
-1. Crie um novo workflow chamado `wb_fabric_pip_tit_receber`
+1. Crie um novo workflow chamado `wf_fabric_retorno`
 2. Adicione um **Webhook node**:
    - **HTTP Method:** `POST`
    - **Path:** deixe gerado automaticamente
@@ -244,7 +243,7 @@ Fazer um HTTP GET para essa URL **acorda a execução exatamente de onde parou**
 
 ### 6.2 O Problema do resumeUrl entre Workflows
 
-O `$execution.resumeUrl` pertence ao workflow principal (o que pausou). O workflow receptor (`wb_fabric_pip_tit_receber`) não tem acesso direto a ele.
+O `$execution.resumeUrl` pertence ao workflow principal (o que pausou). O workflow receptor (`wf_fabric_retorno`) não tem acesso direto a ele.
 
 **Solução:** Usar o Google Sheets como ponte.
 
@@ -276,7 +275,7 @@ Em seguida, um **Google Sheets node** (`Salvar_URL_Retomada`) para salvar:
 
 ### 7.1 Ler resumeUrl e Chamar
 
-No `wb_fabric_pip_tit_receber`, após o Switch confirmar `status = "sucesso"`:
+No `wf_fabric_retorno`, após o Switch confirmar `status = "sucesso"`:
 
 1. **Google Sheets node** (`Ler_URL_Retomada`):
    - **Operation:** Get rows
@@ -373,7 +372,7 @@ return allEmpresasItems.map(item => ({ json: item.json }));
 - [ ] WorkspaceId e PipelineId do Fabric anotados
 - [ ] Nó de variáveis `Variaveis_Fabric` criado no n8n
 - [ ] HTTP Request para acionar o pipeline configurado e testado
-- [ ] Workflow receptor `wb_fabric_pip_tit_receber` criado e **ativado**
+- [ ] Workflow receptor `wf_fabric_retorno` criado e **ativado**
 - [ ] Web Activity configurada no pipeline do Fabric para chamar o webhook
 - [ ] Wait node configurado em modo `On Webhook Call`
 - [ ] Aba `fabric_queue` criada no Google Sheets com cabeçalho `resumeUrl`
@@ -394,4 +393,4 @@ return allEmpresasItems.map(item => ({ json: item.json }));
 
 ---
 
-*Este guia foi construído a partir de uma implementação real em produção. Qualquer dúvida ou contribuição, entre em contato.*
+*Escrito a partir de uma implementação real em produção. Dúvidas e sugestões são bem-vindas pelas issues do repositório.*
